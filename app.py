@@ -2,44 +2,110 @@ import streamlit as st
 import numpy as np
 import joblib
 import os
+import cv2
+import mediapipe as mp
 
-# مسیر پوشه‌ی فعلی (همون جایی که app.py اجرا میشه)
-current_dir = os.path.dirname(os.path.abspath(__file__))
+st.set_page_config(page_title="Eye State Detection", layout="wide")
 
-# مسیرهای احتمالی فایل‌ها
-model_path_dsp = os.path.join(current_dir, "eye_state_model.pkl")
-scaler_path_dsp = os.path.join(current_dir, "scaler.pkl")
+st.title("👁️ Eye State Detection System")
+st.write("پیش‌بینی وضعیت چشم با دو روش: EEG و دوربین")
 
-model_path_gta = os.path.join(os.path.dirname(current_dir), "eye_state_model.pkl")
-scaler_path_gta = os.path.join(os.path.dirname(current_dir), "scaler.pkl")
+tabs = st.tabs(["🔵 EEG Prediction", "🟢 Camera Eye Detection"])
 
-# انتخاب مسیر درست
-if os.path.exists(model_path_dsp) and os.path.exists(scaler_path_dsp):
-    model = joblib.load(model_path_dsp)
-    scaler = joblib.load(scaler_path_dsp)
-elif os.path.exists(model_path_gta) and os.path.exists(scaler_path_gta):
-    model = joblib.load(model_path_gta)
-    scaler = joblib.load(scaler_path_gta)
-else:
-    st.error("❌ فایل‌های مدل پیدا نشدند! لطفاً مطمئن شوید eye_state_model.pkl و scaler.pkl وجود دارند.")
-    st.stop()
+# ============================================================
+# TAB 1 — EEG MODEL
+# ============================================================
+with tabs[0]:
+    st.header("پیش‌بینی وضعیت چشم با EEG")
 
-st.title("EEG Eye State Prediction 🧠👁️")
+    base = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(base, "eye_state_model.pkl")
+    scaler_path = os.path.join(base, "scaler.pkl")
 
-st.write("این وب‌اپ به شما اجازه می‌دهد 14 ویژگی EEG وارد کنید و پیش‌بینی کند چشم باز است یا بسته.")
+    if not os.path.exists(model_path) or not os.path.exists(scaler_path):
+        st.error("❌ فایل‌های مدل EEG پیدا نشدند. لطفاً eye_state_model.pkl و scaler.pkl را در ریپو قرار دهید.")
+        st.stop()
 
-# ساخت فرم برای وارد کردن ویژگی‌ها
-features = []
-for i in range(14):
-    val = st.number_input(f"Feature {i+1}", value=0.0, format="%.2f")
-    features.append(val)
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
 
-if st.button("Predict"):
-    sample = np.array([features])
-    sample_scaled = scaler.transform(sample)
-    prediction = model.predict(sample_scaled)[0]
+    st.subheader("ورود ویژگی‌ها (14 مقدار EEG)")
 
-    if prediction == 0:
-        st.error("Eye State: CLOSED 👁️‍🗨️")
-    else:
-        st.success("Eye State: OPEN 👁️")
+    # دکمه تولید نمونه تصادفی
+    if st.button("🔄 تولید نمونه EEG تصادفی"):
+        random_sample = np.random.normal(0, 1, 14)
+        for i in range(14):
+            st.session_state[f"f{i}"] = float(random_sample[i])
+
+    features = []
+    for i in range(14):
+        val = st.number_input(
+            f"Feature {i+1}",
+            value=st.session_state.get(f"f{i}", 0.0),
+            format="%.4f"
+        )
+        features.append(val)
+
+    if st.button("🔍 پیش‌بینی EEG"):
+        sample = np.array([features])
+        sample_scaled = scaler.transform(sample)
+        prediction = model.predict(sample_scaled)[0]
+
+        if prediction == 0:
+            st.error("👁️‍🗨️ نتیجه: چشم بسته")
+        else:
+            st.success("👁️ نتیجه: چشم باز")
+
+
+# ============================================================
+# TAB 2 — CAMERA DETECTION
+# ============================================================
+with tabs[1]:
+    st.header("تشخیص باز/بسته بودن چشم با دوربین")
+
+    run = st.checkbox("فعال کردن دوربین")
+
+    mp_face_mesh = mp.solutions.face_mesh
+    face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True)
+
+    LEFT_EYE = [33, 160, 158, 133, 153, 144]
+    RIGHT_EYE = [362, 385, 387, 263, 373, 380]
+
+    def eye_aspect_ratio(landmarks, eye_indices):
+        pts = np.array([(landmarks[i].x, landmarks[i].y) for i in eye_indices])
+        A = np.linalg.norm(pts[1] - pts[5])
+        B = np.linalg.norm(pts[2] - pts[4])
+        C = np.linalg.norm(pts[0] - pts[3])
+        return (A + B) / (2.0 * C)
+
+    FRAME_WINDOW = st.image([])
+
+    cap = cv2.VideoCapture(0)
+
+    while run:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(rgb)
+
+        if results.multi_face_landmarks:
+            landmarks = results.multi_face_landmarks[0].landmark
+
+            left_ear = eye_aspect_ratio(landmarks, LEFT_EYE)
+            right_ear = eye_aspect_ratio(landmarks, RIGHT_EYE)
+            ear = (left_ear + right_ear) / 2
+
+            if ear < 0.25:
+                status = "چشم بسته"
+                color = (0, 0, 255)
+            else:
+                status = "چشم باز"
+                color = (0, 255, 0)
+
+            cv2.putText(frame, status, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
+
+        FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+    cap.release()
