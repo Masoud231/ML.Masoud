@@ -4,5 +4,5 @@ pandas
 scikit-learn
 joblib
 ucimlrepo
-matplotlib
-seaborn
+mediapipe
+opencv-python-headless
