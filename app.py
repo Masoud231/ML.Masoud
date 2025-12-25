@@ -31,7 +31,6 @@ with tabs[0]:
 
     st.subheader("ورود ویژگی‌ها (14 مقدار EEG)")
 
-    # دکمه تولید نمونه تصادفی
     if st.button("🔄 تولید نمونه EEG تصادفی"):
         random_sample = np.random.normal(0, 1, 14)
         for i in range(14):
