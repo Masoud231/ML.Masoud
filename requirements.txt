@@ -1,8 +1,7 @@
 streamlit
 numpy
 pandas
-scikit-learn==1.2.2
+scikit-learn
 joblib
 ucimlrepo
-mediapipe==0.10.9
-opencv-python-headless==4.8.1.78
+opencv-python-headless
