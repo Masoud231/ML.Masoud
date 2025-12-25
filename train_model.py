@@ -2,9 +2,10 @@ from ucimlrepo import fetch_ucirepo
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 import joblib
+import os
 
 # مرحله 1: گرفتن دیتاست EEG Eye State
 eeg_eye_state = fetch_ucirepo(id=264)
@@ -13,44 +14,35 @@ eeg_eye_state = fetch_ucirepo(id=264)
 X = eeg_eye_state.data.features.values
 y = eeg_eye_state.data.targets.values.ravel()
 
-# مرحله 3: بررسی توزیع برچسب‌ها
-unique, counts = np.unique(y, return_counts=True)
-print("Label distribution:", dict(zip(unique, counts)))
-
-# مرحله 4: نرمال‌سازی داده‌ها
+# مرحله 3: نرمال‌سازی
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# مرحله 5: تقسیم داده‌ها
+# مرحله 4: تقسیم داده‌ها
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# مدل سریع و بهینه Random Forest
-rf_fast = RandomForestClassifier(
-    n_estimators=400,
-    max_depth=20,
-    max_features='sqrt',
-    min_samples_split=2,
-    min_samples_leaf=1,
+# مدل فوق‌العاده سبک ExtraTrees
+model = ExtraTreesClassifier(
+    n_estimators=100,
+    max_depth=12,
     random_state=42,
     n_jobs=-1
 )
 
-# آموزش مدل
-rf_fast.fit(X_train, y_train)
-
-# پیش‌بینی
-y_pred_fast = rf_fast.predict(X_test)
+# آموزش
+model.fit(X_train, y_train)
 
 # ارزیابی
-print("=== FAST Random Forest Results ===")
-print("Accuracy:", accuracy_score(y_test, y_pred_fast))
-print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred_fast))
-print("Classification Report:\n", classification_report(y_test, y_pred_fast))
+y_pred = model.predict(X_test)
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+print("Classification Report:\n", classification_report(y_test, y_pred))
 
-# ذخیره مدل و اسکیلر
-joblib.dump(rf_fast, "eye_state_model.pkl")
-joblib.dump(scaler, "scaler.pkl")
+# ذخیرهٔ فشرده
+base = os.path.dirname(os.path.abspath(__file__))
+joblib.dump(model, os.path.join(base, "eye_state_model.pkl"), compress=3)
+joblib.dump(scaler, os.path.join(base, "scaler.pkl"), compress=3)
 
-print("Model and scaler saved!")
+print("Model and scaler saved in:", base)
