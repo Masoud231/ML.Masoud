@@ -1,8 +1,8 @@
+mediapipe==0.10.9
+opencv-python-headless
 streamlit
 numpy
 pandas
 scikit-learn
 joblib
 ucimlrepo
-mediapipe
-opencv-python-headless
