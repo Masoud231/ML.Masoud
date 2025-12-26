@@ -5,3 +5,5 @@ scikit-learn
 joblib
 ucimlrepo
 opencv-python-headless
+streamlit-webrtc
+
