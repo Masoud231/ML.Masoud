@@ -3,11 +3,12 @@ import numpy as np
 import joblib
 import os
 import cv2
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 
 st.set_page_config(page_title="Eye State Detection", layout="wide")
 
-st.title("👁️ Eye State Detection System")
-st.write("پیش‌بینی وضعیت چشم با دو روش: EEG و دوربین (بدون mediapipe)")
+st.title("👁️ Eye State Detection System (Web Version)")
+st.write("پیش‌بینی وضعیت چشم با EEG و تشخیص چشم با دوربین (نسخه تحت وب)")
 
 tabs = st.tabs(["🔵 EEG Prediction", "🟢 Camera Eye Detection"])
 
@@ -22,7 +23,7 @@ with tabs[0]:
     scaler_path = os.path.join(base, "scaler.pkl")
 
     if not os.path.exists(model_path) or not os.path.exists(scaler_path):
-        st.error("❌ فایل‌های مدل EEG پیدا نشدند. لطفاً eye_state_model.pkl و scaler.pkl را در ریپو قرار دهید.")
+        st.error("❌ فایل‌های مدل EEG پیدا نشدند.")
         st.stop()
 
     model = joblib.load(model_path)
@@ -50,43 +51,37 @@ with tabs[0]:
         prediction = model.predict(sample_scaled)[0]
 
         if prediction == 0:
-            st.error("👁️‍🗨️ نتیجه: چشم بسته")
+            st.success("Eyes Open")
         else:
-            st.success("👁️ نتیجه: چشم باز")
+            st.error("Eyes Closed")
 
 
 # ============================================================
-# TAB 2 — CAMERA DETECTION (NO MEDIAPIPE)
+# TAB 2 — CAMERA DETECTION (WEBRTC)
 # ============================================================
-with tabs[1]:
-    st.header("تشخیص باز/بسته بودن چشم با دوربین (بدون mediapipe)")
+class EyeDetector(VideoTransformerBase):
+    def __init__(self):
+        self.eye_cascade = cv2.CascadeClassifier("haarcascade_eye.xml")
 
-    run = st.checkbox("فعال کردن دوربین")
-
-    # Load Haarcascade
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
-
-    FRAME_WINDOW = st.image([])
-
-    cap = cv2.VideoCapture(0)
-
-    while run:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        eyes = eye_cascade.detectMultiScale(gray, 1.3, 5)
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        eyes = self.eye_cascade.detectMultiScale(gray, 1.3, 5)
 
         if len(eyes) == 0:
-            status = "چشم بسته"
+            status = "Eyes Closed"
             color = (0, 0, 255)
         else:
-            status = "چشم باز"
+            status = "Eyes Open"
             color = (0, 255, 0)
 
-        cv2.putText(frame, status, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
+        cv2.putText(img, status, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
+        return img
 
-        FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
-    cap.release()
+with tabs[1]:
+    st.header("Camera Eye Detection (WebRTC)")
+    webrtc_streamer(
+        key="eye-detection",
+        video_transformer_factory=EyeDetector,
+        media_stream_constraints={"video": True, "audio": False},
+    )
